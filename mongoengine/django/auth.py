@@ -122,10 +122,10 @@ class Permission(Document):
         # ordering = ('content_type__app_label', 'content_type__model', 'codename')
 
     def __unicode__(self):
-        return u"%s | %s | %s" % (
-            unicode(self.content_type.app_label),
-            unicode(self.content_type),
-            unicode(self.name))
+        return "%s | %s | %s" % (
+            str(self.content_type.app_label),
+            str(self.content_type),
+            str(self.name))
 
     def natural_key(self):
         return (self.codename,) + self.content_type.natural_key()
@@ -199,6 +199,17 @@ class UserManager(models.Manager):
         return ''.join([choice(allowed_chars) for i in range(length)])
 
 
+class PK:
+    """
+    Used as a primary key placeholder class, to make validation work.
+    """
+    key = None
+    def __init__(self, key):
+        self.key = key
+    def value_to_string(self, user):
+        return self.key
+
+
 class User(Document):
     """A User document that aims to mirror most of the API specified by Django
     at http://docs.djangoproject.com/en/dev/topics/auth/#users
@@ -232,7 +243,6 @@ class User(Document):
 
     user_permissions = ListField(ReferenceField(Permission), verbose_name=_('user permissions'),
                                                 help_text=_('Permissions for the user.'))
-
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = ['email']
 
@@ -249,7 +259,7 @@ class User(Document):
     def get_full_name(self):
         """Returns the users first and last names, separated by a space.
         """
-        full_name = u'%s %s' % (self.first_name or '', self.last_name or '')
+        full_name = '%s %s' % (self.first_name or '', self.last_name or '')
         return full_name.strip()
 
     def is_anonymous(self):
@@ -389,11 +399,17 @@ class MongoEngineBackend(object):
             if password and user.check_password(password):
                 backend = auth.get_backends()[0]
                 user.backend = "%s.%s" % (backend.__module__, backend.__class__.__name__)
+                # Adds the primary key object so authentication works.
+                if user:
+                    user._meta.pk = PK(user.id)
                 return user
         return None
 
     def get_user(self, user_id):
-        return self.user_document.objects.with_id(user_id)
+        user = self.user_document.objects.with_id(user_id)
+        if user:
+            user._meta.pk = PK(user_id)
+        return user
 
     @property
     def user_document(self):
